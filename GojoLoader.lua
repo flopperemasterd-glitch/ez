@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local backpack = player:WaitForChild("Backpack")
 
 -- Asset ID of the Gojo skill package
-local ASSET_ID = 128831170078862
+local ASSET_ID = 81897328117024
 
 -- Load the asset
 local success, asset = pcall(function()
@@ -36,11 +36,7 @@ for _, name in ipairs(scriptNames) do
 end
 
 -- Parent scripts/modules to their runtime locations
-loadedScripts.CServer.Parent = Workspace
-loadedScripts.CClient.Parent = backpack
-loadedScripts.Skill1.Parent = backpack
-loadedScripts.HitEvent.Parent = ReplicatedStorage
-loadedScripts.HiboxModule.Parent = ReplicatedStorage
+print("ez")
 
 -- Cleanup the temporary asset container
 asset:Destroy()

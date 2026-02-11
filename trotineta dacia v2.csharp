@@ -1,0 +1,330 @@
+using System;
+using System.Text;
+using System.Threading;
+using System.Collections.Generic;
+
+namespace kaki
+{
+    class Program
+    {
+        static bool spinEnabled = false;
+        static float A = 0, B = 0, C = 0;
+
+        const int width = 120;
+        const int height = 35;
+        static float[] zBuffer = new float[width * height];
+        static char[] buffer = new char[width * height];
+        const char backgroundASCIICode = ' ';
+        const int distanceFromCam = 60;
+        const float K1 = 20;
+        const float incrementSpeed = 0.8f;
+
+        //fFace characters
+        static char frontChar = '@';
+        static char rightChar = '#';
+        static char leftChar = '~';
+        static char backChar = '$';
+        static char bottomChar = '+';
+        static char topChar = '*';
+
+        static void Main(string[] args)
+        {
+            Console.CursorVisible = false;
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+            //try to set buffer size to prevent flickering
+            try
+            {
+                Console.SetBufferSize(width + 1, height + 15);
+            }
+            catch { }
+
+            Console.WriteLine("╔════════════════════════════════════╗");
+            Console.WriteLine("║                e                   ║");
+            Console.WriteLine("╚════════════════════════════════════╝");
+
+            // Character editor
+            Console.WriteLine("\n╔════════════════════════════════════╗");
+            Console.WriteLine("║     CUBE FACE CHARACTER EDITOR     ║");
+            Console.WriteLine("╚════════════════════════════════════╝");
+            Console.WriteLine("\nCustomize characters for each cube face:");
+            Console.WriteLine("(Press Enter to skip and use defaults)");
+
+            Console.Write($"\nFront face [{frontChar}]: ");
+            string input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) frontChar = input[0];
+
+            Console.Write($"Right face [{rightChar}]: ");
+            input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) rightChar = input[0];
+
+            Console.Write($"Left face [{leftChar}]: ");
+            input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) leftChar = input[0];
+
+            Console.Write($"Back face [{backChar}]: ");
+            input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) backChar = input[0];
+
+            Console.Write($"Bottom face [{bottomChar}]: ");
+            input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) bottomChar = input[0];
+
+            Console.Write($"Top face [{topChar}]: ");
+            input = Console.ReadLine();
+            if (!string.IsNullOrEmpty(input)) topChar = input[0];
+
+            Console.WriteLine("\n✓ Face characters configured!");
+            Thread.Sleep(500);
+
+            Console.WriteLine("\nEnable cube spinning? (y/n)");
+            var key = Console.ReadKey(true);
+            spinEnabled = (key.KeyChar == 'y' || key.KeyChar == 'Y');
+
+            var questions = new List<(string question, string[] answers, int correct)>
+            {
+                ("What is 15 + 27?", new[] {"42", "52", "32"}, 0),
+                ("What is 8 × 9?", new[] {"72", "63", "81"}, 1),
+                ("What is 144 ÷ 12?", new[] {"12", "14", "10"}, 0),
+                ("What is 25²?", new[] {"625", "525", "725"}, 0),
+                ("What is √196?", new[] {"14", "16", "12"}, 0),
+                ("What is 7³?", new[] {"343", "243", "443"}, 0),
+                ("What is 50% of 88?", new[] {"44", "40", "48"}, 0),
+                ("What is 3⁴?", new[] {"81", "64", "27"}, 0),
+                ("What is 99 - 37?", new[] {"62", "52", "72"}, 0),
+                ("What is 11 × 11?", new[] {"121", "111", "131"}, 0)
+            };
+
+            int score = 0;
+
+            for (int q = 0; q < questions.Count; q++)
+            {
+                var (question, answers, correct) = questions[q];
+                bool answered = false;
+                int selected = -1;
+                DateTime startTime = DateTime.Now;
+                double timeLimit = 10.0;
+
+                // Reset rotation for each question if not spinning
+                if (!spinEnabled)
+                {
+                    A = 0.8f;
+                    B = 0.5f;
+                    C = 0.0f;
+                }
+
+                StringBuilder sb = new StringBuilder(width * (height + 10));
+
+                while (!answered)
+                {
+                    double elapsed = (DateTime.Now - startTime).TotalSeconds;
+                    double remaining = Math.Max(0, timeLimit - elapsed);
+
+                    if (remaining <= 0)
+                    {
+                        break;
+                    }
+
+                    // clear buffers
+                    Array.Fill(buffer, backgroundASCIICode);
+                    Array.Fill(zBuffer, 0f);
+
+                    // render three cubes with different sizes and positions
+                    RenderCube(8, -30, answers[0], 10); // yOffset = 10 (lower)
+                    RenderCube(8, 0, answers[1], 10);
+                    RenderCube(8, 30, answers[2], 10);
+
+                    // build output string
+                    sb.Clear();
+
+                    // question header
+                    sb.AppendLine($"╔═══ QUESTION {q + 1}/{questions.Count} ═══════════════════════════════════════════════════╗");
+                    sb.AppendLine($"║  {question.PadRight(width - 4)}║");
+                    sb.AppendLine("╚" + new string('═', width - 2) + "╝");
+                    sb.AppendLine();
+
+                    // render buffer
+                    for (int k = 0; k < height * width; k++)
+                    {
+                        if (k % width == 0 && k > 0)
+                            sb.Append('\n');
+                        sb.Append(buffer[k]);
+                    }
+
+                    sb.AppendLine();
+                    sb.AppendLine();
+
+                    // timer
+                    int barWidth = 40;
+                    int filled = (int)((remaining / timeLimit) * barWidth);
+                    sb.Append("TIME: [");
+                    sb.Append(new string('█', filled));
+                    sb.Append(new string('░', barWidth - filled));
+                    sb.AppendLine($"] {remaining:F1}s");
+
+                    sb.AppendLine("\n       [A] Left          [S] Middle          [D] Right");
+
+                    // single write to reduce flicker
+                    Console.SetCursorPosition(0, 0);
+                    Console.Write(sb.ToString());
+
+                    // check for input
+                    if (Console.KeyAvailable)
+                    {
+                        var input2 = Console.ReadKey(true);
+                        if (input2.Key == ConsoleKey.A)
+                        {
+                            selected = 0;
+                            answered = true;
+                        }
+                        else if (input2.Key == ConsoleKey.S)
+                        {
+                            selected = 1;
+                            answered = true;
+                        }
+                        else if (input2.Key == ConsoleKey.D)
+                        {
+                            selected = 2;
+                            answered = true;
+                        }
+                    }
+
+                    if (spinEnabled)
+                    {
+                        A += 0.04f;
+                        B += 0.04f;
+                        C += 0.01f;
+                    }
+
+                    Thread.Sleep(50);
+                }
+
+                // check answer
+                Console.Clear();
+                if (selected == correct)
+                {
+                    score++;
+                    Console.WriteLine("\n\n╔════════════════════════════════════╗");
+                    Console.WriteLine("║            CORRECT!                ║");
+                    Console.WriteLine("╚════════════════════════════════════╝");
+                }
+                else
+                {
+                    Console.WriteLine("\n\n╔════════════════════════════════════╗");
+                    Console.WriteLine("║            WRONG!                  ║");
+                    Console.WriteLine($"║    Correct: {answers[correct].PadRight(20)}║");
+                    Console.WriteLine("╚════════════════════════════════════╝");
+                }
+                Thread.Sleep(1500);
+            }
+
+            // final score
+            Console.Clear();
+            Console.WriteLine("\n\n╔════════════════════════════════════╗");
+            Console.WriteLine("║      SIMULATION COMPLETE           ║");
+            Console.WriteLine("╚════════════════════════════════════╝");
+            Console.WriteLine($"\nFinal Score: {score}/{questions.Count}");
+            Console.WriteLine("\nPress any key to exit...");
+            Console.ReadKey();
+        }
+
+        static void RenderCube(float cubeWidth, float horizontalOffset, string answer, int yOffset)
+        {
+            for (float cubeX = -cubeWidth; cubeX < cubeWidth; cubeX += incrementSpeed)
+            {
+                for (float cubeY = -cubeWidth; cubeY < cubeWidth; cubeY += incrementSpeed)
+                {
+                    CalculateForSurface(cubeX, cubeY, -cubeWidth, frontChar, horizontalOffset, yOffset); // front
+                    CalculateForSurface(cubeWidth, cubeY, cubeX, rightChar, horizontalOffset, yOffset);  // right
+                    CalculateForSurface(-cubeWidth, cubeY, -cubeX, leftChar, horizontalOffset, yOffset); // left
+                    CalculateForSurface(-cubeX, cubeY, cubeWidth, backChar, horizontalOffset, yOffset); // back
+                    CalculateForSurface(cubeX, -cubeWidth, -cubeY, bottomChar, horizontalOffset, yOffset); // bottom
+                    CalculateForSurface(cubeX, cubeWidth, cubeY, topChar, horizontalOffset, yOffset);  // top
+                }
+            }
+
+            float textZ = -cubeWidth;
+            float charSpacing = 2.8f;
+            int numChars = answer.Length;
+            float totalWidth = (numChars - 1) * charSpacing;
+            float startLocalX = -totalWidth / 2f;
+
+            for (int i = 0; i < numChars; i++)
+            {
+                float localX = startLocalX + i * charSpacing;
+                float localY = 0f;
+
+                float x = CalculateX(localX, localY, textZ);
+                float y = CalculateY(localX, localY, textZ);
+                float z = CalculateZ(localX, localY, textZ) + distanceFromCam;
+
+                if (z <= 0) continue;
+
+                float ooz = 1 / z;
+                ooz += 0.001f;
+
+                int xp = (int)(width / 2 + horizontalOffset + K1 * ooz * x * 2);
+                int yp = (int)(height / 2 + yOffset + K1 * ooz * y);
+
+                if (xp >= 0 && xp < width && yp >= 0 && yp < height)
+                {
+                    int idx = xp + yp * width;
+                    if (ooz >= zBuffer[idx])
+                    {
+                        zBuffer[idx] = ooz;
+                        buffer[idx] = answer[i];
+                    }
+                }
+            }
+        }
+
+        static void CalculateForSurface(float cubeX, float cubeY, float cubeZ, char ch, float horizontalOffset, int yOffset)
+        {
+            float x = CalculateX(cubeX, cubeY, cubeZ);
+            float y = CalculateY(cubeX, cubeY, cubeZ);
+            float z = CalculateZ(cubeX, cubeY, cubeZ) + distanceFromCam;
+
+            if (z <= 0) return;
+
+            float ooz = 1 / z;
+
+            int xp = (int)(width / 2 + horizontalOffset + K1 * ooz * x * 2);
+            int yp = (int)(height / 2 + yOffset + K1 * ooz * y);
+
+            if (xp >= 0 && xp < width && yp >= 0 && yp < height)
+            {
+                int idx = xp + yp * width;
+                if (ooz > zBuffer[idx])
+                {
+                    zBuffer[idx] = ooz;
+                    buffer[idx] = ch;
+                }
+            }
+        }
+
+        static float CalculateX(float i, float j, float k)
+        {
+            return j * (float)Math.Sin(A) * (float)Math.Sin(B) * (float)Math.Cos(C) -
+                   k * (float)Math.Cos(A) * (float)Math.Sin(B) * (float)Math.Cos(C) +
+                   j * (float)Math.Cos(A) * (float)Math.Sin(C) +
+                   k * (float)Math.Sin(A) * (float)Math.Sin(C) +
+                   i * (float)Math.Cos(B) * (float)Math.Cos(C);
+        }
+
+        static float CalculateY(float i, float j, float k)
+        {
+            return j * (float)Math.Cos(A) * (float)Math.Cos(C) +
+                   k * (float)Math.Sin(A) * (float)Math.Cos(C) -
+                   j * (float)Math.Sin(A) * (float)Math.Sin(B) * (float)Math.Sin(C) +
+                   k * (float)Math.Cos(A) * (float)Math.Sin(B) * (float)Math.Sin(C) -
+                   i * (float)Math.Cos(B) * (float)Math.Sin(C);
+        }
+
+        static float CalculateZ(float i, float j, float k)
+        {
+            return k * (float)Math.Cos(A) * (float)Math.Cos(B) -
+                   j * (float)Math.Sin(A) * (float)Math.Cos(B) +
+                   i * (float)Math.Sin(B);
+        }
+    }
+}
